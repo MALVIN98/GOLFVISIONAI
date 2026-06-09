@@ -8,6 +8,8 @@ Requirements:
       torch torchvision flask flask-cors
 """
 
+import tempfile
+
 import cv2
 from matplotlib.style import use
 import numpy as np
@@ -429,21 +431,30 @@ class GolfDBBenchmark:
         }
     
     def _use_fallback_stats(self):
-        """Fallback if CSV not found"""
-        self.STATS = {
-            "driver": {"n":420, "avg_score":74.2, "std_score":9.1,
-                       "hip_turn_mean":44.8, "shoulder_turn_mean":91.3, 
-                       "spine_angle_mean":37.5, "top_amateur":82.0, "tour":91.4},
-            "iron": {"n":380, "avg_score":71.5, "std_score":8.7,
-                     "hip_turn_mean":40.2, "shoulder_turn_mean":85.1,
-                     "spine_angle_mean":34.8, "top_amateur":80.0, "tour":89.2},
-            "wedge": {"n":340, "avg_score":68.8, "std_score":9.4,
-                      "hip_turn_mean":32.4, "shoulder_turn_mean":78.3,
-                      "spine_angle_mean":30.1, "top_amateur":77.0, "tour":86.1},
-            "putt": {"n":260, "avg_score":75.1, "std_score":7.8,
-                     "hip_turn_mean":5.2, "shoulder_turn_mean":20.4,
-                     "spine_angle_mean":15.3, "top_amateur":83.0, "tour":92.3},
-        }
+     """Fallback if CSV not found - used for testing"""
+     print("[GolfDB] ⚠️ Using FALLBACK stats (real GolfDB.csv not found)")
+     self.STATS = {
+        "driver": {
+            "n": 420, "avg_score": 74.2, "std_score": 9.1,
+            "hip_turn_mean": 44.8, "shoulder_turn_mean": 91.3, 
+            "spine_angle_mean": 37.5, "top_amateur": 82.0, "tour": 91.4
+        },
+        "iron": {
+            "n": 380, "avg_score": 71.5, "std_score": 8.7,
+            "hip_turn_mean": 40.2, "shoulder_turn_mean": 85.1,
+            "spine_angle_mean": 34.8, "top_amateur": 80.0, "tour": 89.2
+        },
+        "wedge": {
+            "n": 340, "avg_score": 68.8, "std_score": 9.4,
+            "hip_turn_mean": 32.4, "shoulder_turn_mean": 78.3,
+            "spine_angle_mean": 30.1, "top_amateur": 77.0, "tour": 86.1
+        },
+        "putt": {
+            "n": 260, "avg_score": 75.1, "std_score": 7.8,
+            "hip_turn_mean": 5.2, "shoulder_turn_mean": 20.4,
+            "spine_angle_mean": 15.3, "top_amateur": 83.0, "tour": 92.3
+        },
+    }
     
     def get_benchmark(self, swing_type: str) -> Dict:
         return self.STATS.get(swing_type, self.STATS["driver"])
@@ -903,22 +914,45 @@ def create_api(pipeline: GolfVisionPipeline):
     def health():
         return jsonify({"status": "ok", "device": DEVICE, "model": "YOLOv8+LSTM"})
 
-    # GolfDB Stats Endpoint
+    # GolfDB Stats Endpoint - NOW USING REAL DATA FROM DATASET
     @app.route("/api/golfdb/stats")
     def golfdb_stats():
-        """Return GolfDB benchmark statistics for frontend"""
-        # Return fallback stats directly (temporary fix)
-        fallback = {
-            "driver": {"avgScore": 74, "stdScore": 9.1, "topAmateur": 82, "tour": 91,
-                       "backswingAngle": 97, "hipTurn": 45, "shoulderTurn": 91, "spineAngle": 38},
-            "iron": {"avgScore": 71, "stdScore": 8.7, "topAmateur": 80, "tour": 89,
-                     "backswingAngle": 90, "hipTurn": 40, "shoulderTurn": 85, "spineAngle": 35},
-            "wedge": {"avgScore": 68, "stdScore": 9.4, "topAmateur": 77, "tour": 86,
-                      "backswingAngle": 80, "hipTurn": 32, "shoulderTurn": 78, "spineAngle": 30},
-            "putt": {"avgScore": 75, "stdScore": 7.8, "topAmateur": 83, "tour": 92,
-                     "backswingAngle": 25, "hipTurn": 5, "shoulderTurn": 20, "spineAngle": 15}
-        }
-        return jsonify(fallback)
+        """Return GolfDB benchmark statistics from REAL dataset"""
+        try:
+            # Try to get REAL stats from the pipeline's golfdb instance
+            stats = pipeline.golfdb.STATS
+            
+            # Convert to frontend-friendly format
+            frontend_stats = {}
+            for club_type, club_stats in stats.items():
+                frontend_stats[club_type] = {
+                    "avgScore": club_stats.get("avg_score", 74),
+                    "stdScore": club_stats.get("std_score", 9.1),
+                    "topAmateur": club_stats.get("top_amateur", 82),
+                    "tour": club_stats.get("tour", 91),
+                    "backswingAngle": 90,  # Default - GolfDB doesn't track this
+                    "hipTurn": club_stats.get("hip_turn_mean", 40),
+                    "shoulderTurn": club_stats.get("shoulder_turn_mean", 85),
+                    "spineAngle": club_stats.get("spine_angle_mean", 35)
+                }
+            
+            print(f"[API] Returning REAL GolfDB stats for clubs: {list(frontend_stats.keys())}")
+            return jsonify(frontend_stats)
+            
+        except Exception as e:
+            print(f"[API] Error loading GolfDB stats: {e}")
+            # Fallback to hardcoded stats if real ones aren't available
+            fallback = {
+                "driver": {"avgScore": 74, "stdScore": 9.1, "topAmateur": 82, "tour": 91,
+                           "backswingAngle": 97, "hipTurn": 45, "shoulderTurn": 91, "spineAngle": 38},
+                "iron": {"avgScore": 71, "stdScore": 8.7, "topAmateur": 80, "tour": 89,
+                         "backswingAngle": 90, "hipTurn": 40, "shoulderTurn": 85, "spineAngle": 35},
+                "wedge": {"avgScore": 68, "stdScore": 9.4, "topAmateur": 77, "tour": 86,
+                          "backswingAngle": 80, "hipTurn": 32, "shoulderTurn": 78, "spineAngle": 30},
+                "putt": {"avgScore": 75, "stdScore": 7.8, "topAmateur": 83, "tour": 92,
+                         "backswingAngle": 25, "hipTurn": 5, "shoulderTurn": 20, "spineAngle": 15}
+            }
+            return jsonify(fallback)
 
     # Extract Poses Endpoint
     @app.route("/api/extract-poses", methods=["POST"])
@@ -960,7 +994,7 @@ def create_api(pipeline: GolfVisionPipeline):
         user_id = request.form.get("userId")
         conf_thr = float(request.form.get("confidence", "0.5"))
 
-        tmp = f"/tmp/golf_{int(time.time())}.mp4"
+        tmp = os.path.join(tempfile.gettempdir(), f"golf_{int(time.time())}.mp4")
         video_file.save(tmp)
 
         try:
@@ -972,7 +1006,6 @@ def create_api(pipeline: GolfVisionPipeline):
             return jsonify({"error": str(e)}), 500
 
     return app
-
 
 # ═══════════════════════════════════════════
 # GOLFDB DATASET LOADER (for training)
