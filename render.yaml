@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: golf-vision-api
+    runtime: python
+    repo: https://github.com/yourusername/your-repo
+    branch: main
+    buildCommand: |
+      pip install -r requirements.txt
+      gdown --folder https://drive.google.com/drive/folders/your-folder-id  # Replace with your Google Drive link
+    startCommand: gunicorn backend:app
+    envVars:
+      - key: FIREBASE_CRED_PATH
+        value: serviceAccountKey.json
+    disk:
+      name: golfdb
+      mountPath: /opt/data
+      sizeGB: 20
